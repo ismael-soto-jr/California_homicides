@@ -1,0 +1,28 @@
+"0","#create  murder rate"
+"0","#summary_final$PERWT.sum[summary_final$PERWT.sum==0] <- 10000"
+"0",""
+"0","summary_final <- mutate(summary_final,"
+"0","                        murder_rate = murder.sum/PERWT.sum*100000)"
+"0","summary_final <- summary_final %>% "
+"0","  filter(PERWT.sum != 0)"
+"0",""
+"0","summary_final <- summary_final %>%  mutate_at(vars(murder_rate), funs(round(.,2)))"
+"2","Warning:"
+"2"," `funs()` was deprecated in dplyr 0.8.0.
+Please use a list of either functions or lambdas: 
+
+  # Simple named list: 
+  list(mean = mean, median = median)
+
+  # Auto named with `tibble::lst()`: 
+  tibble::lst(mean, median)
+
+  # Using lambdas
+  list(~ mean(., trim = .2), ~ median(., na.rm = TRUE))
+[90mThis warning is displayed once every 8 hours.[39m
+[90mCall `lifecycle::last_lifecycle_warnings()` to see where this warning was generated.[39m
+"
+"0","summary_final <- summary_final %>%  "
+"0","  mutate_at(vars(murder_rate), funs(format(., digits=2)))"
+"0","summary_final$murder_rate <- as.double(summary_final$murder_rate)"
+"0",""

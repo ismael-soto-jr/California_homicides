@@ -1,0 +1,6 @@
+"0","#attempting to gather individual data"
+"0","homicide <- mutate(homicide,"
+"0","             drop = ifelse(homicide_type ==""manslaughter by negligence"" | offender_1_circumstance == ""felon killed by police"" | offender_1_circumstance ==""felon killed by private citizen"",1,0))"
+"0",""
+"0","homicide %>% "
+"0","  count(drop)"

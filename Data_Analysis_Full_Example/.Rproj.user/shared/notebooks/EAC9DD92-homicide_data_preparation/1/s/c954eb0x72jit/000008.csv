@@ -1,0 +1,6 @@
+"0","homicide %>% "
+"0","  group_by(year,state) %>% "
+"0","  summarise(N = n()) %>% "
+"0","  filter(N>800 & N<2500 & year==2020) #major missing ohio (~820), North Carolina (~852) Florida (~1,290), Pennsylvania (~1009), Georgia (~943), New York (~808)"
+"1","`summarise()` has grouped output by 'year'. You can override using the `.groups` argument.
+"

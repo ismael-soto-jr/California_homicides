@@ -1,0 +1,2 @@
+"0","final_homicide %>% "
+"0","  count(is.na(race_new)) #477 total na"

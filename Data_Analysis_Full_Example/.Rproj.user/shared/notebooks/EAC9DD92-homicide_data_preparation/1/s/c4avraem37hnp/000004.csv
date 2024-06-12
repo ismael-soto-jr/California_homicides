@@ -1,0 +1,4 @@
+"0",""
+"0","homicide %>% "
+"0","  filter(drop==1) %>% "
+"0","  count(homicide_type,offender_1_circumstance)"

@@ -1,0 +1,1095 @@
+---
+title: "Homicide Rates 2019-2020: Data Preparation (EDA + Data Cleaning)"
+author: "Ismael Soto"
+date: "June 11, 2024"
+output: "Three main files are produced: murder_rates.rds ,homicide_nat.rds , and hom_state.rds"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(haven)
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(here)
+library(table1)
+library(pastecs)
+library(furniture)
+library(gridExtra)
+library(tidycensus)
+library(purrr)
+library(ipumsr)
+library(doBy)
+library(skimr)
+library(stringr)
+library(modelr)
+library(ggrepel)
+library(plotly)
+```
+
+```{r}
+ddi <- read_ipums_ddi("usa_00004.xml")
+data <- read_ipums_micro(ddi)
+```
+
+```{r}
+skim(data)
+```
+
+```{r}
+ddi[["var_info"]][["var_desc"]]
+```
+
+```{r}
+ddi[["var_info"]][["val_labels"]][[9]][["lbl"]]
+```
+```{r}
+dim(data)
+names(data)
+str(data)
+```
+
+```{r}
+head(data)
+tail(data)
+```
+
+```{r}
+select(data,STATEFIP) %>% unique %>% nrow
+unique(data$STATEFIP)
+unique(data$RACE)
+unique(data$RACED)
+unique(data$HISPAN)
+unique(data$AGE)
+unique(data$SEX)
+summary(data$AGE)
+```
+
+
+```{r}
+data <- mutate(data,
+               hispanic=ifelse(HISPAN>0,1,0),
+               race_new = ifelse(RACE==1 & hispanic==0,1,
+                          ifelse(RACE==2 & hispanic==0,2,
+                          ifelse(RACE==3 & hispanic==0,3,
+                          ifelse(RACE==4 & hispanic==0,4,
+                          ifelse(RACE==5 & hispanic==0,4,
+                          ifelse(RACE==6 & hispanic==0,4,
+                          ifelse(RACE==7 & hispanic==0,5,
+                          ifelse(RACE==8 & hispanic==0,6,
+                          ifelse(RACE==9 & hispanic==0,6,
+                          ifelse(hispanic==1,7,8)))))))))),
+               male = ifelse(SEX==1,1,0),
+               AGE = as.numeric(AGE)
+               )
+
+data$STATEFIP <- as.numeric(data$STATEFIP)
+data %>% 
+  filter(AGE==000)
+data %>% 
+  count(is.na(AGE))
+```
+
+
+
+```{r census summary}
+
+
+summary <- summaryBy(PERWT ~ YEAR + male + race_new + AGE + STATEFIP, FUN=c(sum,mean,length), data=data)
+#check that weights sum to California population in each year
+summary2 <- summaryBy(PERWT.sum ~ YEAR, FUN=c(sum), data=summary)
+
+
+#create a year 2020  using 2019 populatin estimates (Temporary until IPUMS 2020 released)
+y2020 <- filter(summary, YEAR==2019)
+y2020 <-mutate(y2020,
+               YEAR=YEAR+1)
+summary_final <-rbind(summary,y2020)
+summary_final <-filter(summary_final, race_new %in% c(1,2,4,7))
+
+skim(summary_final)
+```
+
+
+```{r homicide data}
+shr_1976_2020 <- readRDS("shr_1976_2020.rds")
+```
+
+
+```{r}
+skim(shr_1976_2020)
+```
+
+```{r EDA}
+dim(shr_1976_2020)
+head(shr_1976_2020)
+tail(shr_1976_2020)
+select(shr_1976_2020, state) %>% unique %>% nrow
+unique(shr_1976_2020$state)
+unique(shr_1976_2020$fips_state_code)
+names(shr_1976_2020)
+```
+
+```{r}
+summary(shr_1976_2020$additional_victim_count)
+select(shr_1976_2020, ori) %>% unique %>% nrow #number of agencies
+unique(shr_1976_2020$year)
+```
+
+
+```{r identifying murders}
+unique(shr_1976_2020$homicide_type)
+shr_1976_2020 %>% 
+  filter(year>2018) %>% 
+  count(homicide_type) #manslaughter by negligence drop
+
+shr_1976_2020 %>% 
+  filter(year>2018 & homicide_type=="manslaughter by negligence") %>% 
+  count(homicide_type,offender_1_circumstance) #need to drop negligent homicides
+
+unique(shr_1976_2020$offender_1_circumstance) 
+shr_1976_2020 %>% 
+  filter(year>2018 & offender_1_circumstance=="felon killed by private citizen" |offender_1_circumstance=="felon killed by police" ) %>% 
+  count(homicide_type,offender_1_circumstance)
+```
+
+```{r analysis of drop variables}
+#need to drop these ~3243
+t4 <- shr_1976_2020 %>% 
+  filter(year>2018 & (homicide_type=="manslaughter by negligence" | offender_1_circumstance== "felon killed by police" | offender_1_circumstance=="felon killed by private citizen"))
+
+t4 %>% 
+  filter(offender_1_circumstance== "felon killed by police" | offender_1_circumstance=="	felon killed by private citizen")
+t4 %>% 
+  count(year) #2019	1469 & 2020	1774
+
+#drop from these ~49 and ~75 for 2019 and 2020
+t4 %>% 
+  filter(additional_victim_count>0) %>% 
+  count(year)
+
+t4 %>% 
+  filter(additional_victim_count>0) 
+
+
+
+#Checking to ensure all justifiable and negligent murders 
+t5 <- t4 %>% 
+  filter(additional_offender_count>0) %>%
+  select(ori, year,month_of_offense, state,incident_number,situation,additional_offender_count, homicide_type, offender_1_age:offender_9_subcircumstance)
+
+t5 <- t5 %>% 
+  pivot_longer(col= -c(ori,year,month_of_offense, state, incident_number,situation,additional_offender_count,homicide_type),
+               names_to = "key",
+               values_to = "value")
+
+ 
+
+
+
+
+t5 <- t5 %>% 
+separate(key, into = c("one", "two","three","four"), sep = "_")
+
+t5$value <- t5$value %>% 
+  replace_na('unknown')
+t5 %>% 
+  count(value)
+
+t5 <- t5 %>% 
+  select(-"four") %>% 
+  pivot_wider(
+               names_from = "three",
+               values_from = "value")
+
+             
+t5 <- mutate(t5, 
+             drop= ifelse(age=="unknown" & sex=="unknown" & race=="unknown" & ethnic=="unknown" & weapon=="unknown" & circumstance =="unknown" & subcircumstance=="unknown",1,0))
+
+
+t5 %>% 
+  count(drop)
+t5 %>% 
+  filter(drop==1)
+t5<- t5 %>% 
+  filter(drop==0)
+
+t5 %>% 
+  count(circumstance,subcircumstance)
+
+library(hrbrthemes)
+library(viridis)
+library(scales)
+
+t5 %>%
+  ggplot(mapping = aes(fill = subcircumstance, x = circumstance)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_text(size = 9),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12))
+
+
+t5 %>%
+  ggplot(mapping = aes(fill = circumstance, x = homicide_type)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_text(size = 9),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12))
+
+
+
+
+t6 <- t4 %>% 
+  filter(additional_offender_count==0) %>% 
+  select(ori,year,month_of_offense, state,incident_number,situation, additional_offender_count, homicide_type, offender_1_age:offender_1_subcircumstance)
+
+t6 %>%
+  ggplot(mapping = aes(fill = offender_1_subcircumstance, x = offender_1_circumstance)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_text(size = 9),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12))
+
+t6 %>%
+  ggplot(mapping = aes(fill = offender_1_circumstance, x = homicide_type)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_text(size = 9),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12))
+
+
+ v <- t4 %>%
+  ggplot(mapping = aes(fill = offender_1_subcircumstance, x = offender_1_circumstance)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_text(size = 9),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12))
+
+c <- t4 %>%
+  ggplot(mapping = aes(fill = offender_1_circumstance, x = homicide_type)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_text(size = 9),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12))
+
+
+#and ~1420 and ~1699 for 2019 and 2020 here
+t4 %>% 
+  filter(additional_victim_count==0) %>% 
+  count(year)
+t4 %>% 
+    filter(additional_victim_count==0)
+
+ggplotly(v)
+ggplotly(c)
+```
+
+
+```{r loading homicide data}
+homicide <- shr_1976_2020
+homicide <- homicide %>% 
+  filter(year>2018) 
+
+skim(homicide)
+```
+
+
+```{r graph drop overview}
+
+h <- homicide %>%
+  ggplot(mapping = aes(color = offender_1_subcircumstance, x = offender_1_circumstance)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_blank(),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12))
+
+p <- homicide %>%
+  ggplot(mapping = aes(fill = offender_1_circumstance, x = homicide_type)) +
+  geom_bar() +
+  scale_fill_viridis(discrete = T) +
+  theme_ipsum() +
+  ylab("Total") +
+  xlab("") +
+  theme(axis.text.x = element_text(size = 9),
+        plot.title = element_text(size = 13)) +
+  scale_x_discrete(labels = wrap_format(12)) 
+
+ggplotly(p)
+ggplotly(h)
+```
+
+```{r}
+library(knitr)
+homicide %>% 
+  count(homicide_type, offender_1_circumstance)
+
+table <- homicide %>%
+  filter(homicide_type=="manslaughter by negligence" | offender_1_circumstance== "felon killed by police" | offender_1_circumstance=="felon killed by private citizen") %>% 
+  group_by(state, year) %>%
+  count(homicide_type,offender_1_circumstance) %>% 
+  kable(caption = "Total Justifiable & negligent per year/state/type/circumstance")
+
+table
+
+table_just_neg_total_count <- homicide %>%
+  filter(homicide_type=="manslaughter by negligence" | offender_1_circumstance== "felon killed by police" | offender_1_circumstance=="felon killed by private citizen") %>% 
+  group_by(year) %>% 
+  count(homicide_type,offender_1_circumstance) %>% 
+  kable(caption = "Total Justifiable & negligent per year/type,circumstance")
+table_just_neg_total_count
+
+table_just_neg_total <- homicide %>%
+  filter(homicide_type=="manslaughter by negligence" | offender_1_circumstance== "felon killed by police" | offender_1_circumstance=="felon killed by private citizen") %>% 
+  group_by(year) %>% 
+  summarise(total= sum((homicide_type=="manslaughter by negligence" | offender_1_circumstance== "felon killed by police" | offender_1_circumstance=="felon killed by private citizen"))) %>% 
+  kable(caption = "Total Justifiable & negligent per year")
+table_just_neg_total
+```
+
+
+
+```{r justifiable & mult. victims}
+#attempting to gather individual data
+homicide <- mutate(homicide,
+             drop = ifelse(homicide_type =="manslaughter by negligence" | offender_1_circumstance == "felon killed by police" | offender_1_circumstance =="felon killed by private citizen",1,0))
+
+homicide %>% 
+  count(drop)
+
+homicide %>% 
+  filter(drop==1) %>% 
+  count(homicide_type,offender_1_circumstance)
+
+homicide <- homicide %>% #dropping variables
+  filter(drop==0) 
+
+test<- homicide %>% 
+  filter(additional_victim_count>0)
+
+
+
+t2 <- test %>%
+  select(ori,year,state,month_of_offense, fips_state_code, crosswalk_agency_name, population_group, population, homicide_type, incident_number, situation, additional_victim_count, victim_1_age:victim_11_ethnic_origin, offender_1_circumstance, offender_1_subcircumstance) 
+
+
+
+t2 <- mutate(t2,
+             drop = ifelse(homicide_type =="manslaughter by negligence" | offender_1_circumstance == "felon killed by police" | offender_1_circumstance =="felon killed by private citizen",1,0))
+
+t2 %>% 
+  count(drop)
+
+t2 <- t2 %>% 
+  filter(drop==0) 
+t2 <- t2 %>% 
+  select(-homicide_type,-drop, - offender_1_circumstance, -offender_1_subcircumstance)
+
+t2 <- t2 %>% 
+  pivot_longer(col= -c(ori,year,month_of_offense, state,fips_state_code,crosswalk_agency_name, population_group,population,incident_number,situation,additional_victim_count),
+               names_to = "key",
+               values_to = "value")
+t2 <- t2 %>% 
+separate(key, into = c("one", "two","three","four"), sep = "_")
+
+t2$value <- t2$value %>% 
+  replace_na('unknown')
+t2 %>% 
+  count(value)
+
+t3 <- t2 %>% 
+  select(-"four") %>% 
+  pivot_wider(
+               names_from = "three",
+               values_from = "value")
+t3 <- mutate(t3, 
+             drop= ifelse(age=="unknown" & sex=="unknown" & race=="unknown" & ethnic=="unknown",1,0))
+t3 %>% 
+  count(drop)
+t3 %>% 
+  filter(drop==0 & is.na(fips_state_code))
+t3<- t3 %>% 
+  filter(drop==0)
+```
+
+```{r}
+skim(t3)
+```
+
+
+
+
+```{r single victim justifiables/negligents}
+homicide <- homicide %>% #getting only single cases (org 33058 obs. vs 31346 single) - after dropping negligent/justifiable 29815 vs. 28227
+  filter(additional_victim_count==0) %>% 
+  select(ori,year,state,month_of_offense, fips_state_code, crosswalk_agency_name, population_group, population, homicide_type, incident_number, situation, additional_victim_count, victim_1_age, victim_1_sex, victim_1_race, victim_1_ethnic_origin, offender_1_circumstance, offender_1_subcircumstance) 
+
+
+homicide <- mutate(homicide,
+             drop = ifelse(homicide_type =="manslaughter by negligence" | offender_1_circumstance == "felon killed by police" | offender_1_circumstance =="felon killed by private citizen",1,0))
+
+homicide %>% 
+  count(drop)
+
+homicide %>% 
+  filter(drop==1) %>% 
+  count(homicide_type,offender_1_circumstance)
+
+homicide <- homicide %>% 
+  filter(drop==0) %>% 
+  select(-homicide_type,-drop, - offender_1_circumstance, -offender_1_subcircumstance)
+skim(homicide)
+```
+
+
+```{r merge homicides}
+
+t3 <- mutate(t3,
+             victim_1_age = age,
+             victim_1_sex = sex,
+             victim_1_race = race,
+             victim_1_ethnic_origin = ethnic)
+
+
+t3 <- t3 %>%
+  select(ori,year,state,month_of_offense, fips_state_code, crosswalk_agency_name, population_group, population, incident_number, situation, additional_victim_count, victim_1_age,victim_1_sex, victim_1_race,victim_1_ethnic_origin) 
+
+homicide <- bind_rows(homicide,t3) #combining single and multiple case data
+homicide %>% 
+  filter(additional_victim_count>10) # checking if mult victim observations merged
+skim(homicide)
+```
+
+
+```{r}
+ggplot(data=homicide) +
+  geom_bar(mapping = aes(x=victim_1_race)) +
+  theme(axis.text.x = element_text(size = 6))
+
+
+ggplot(data=homicide) +
+  geom_bar(mapping = aes(x=victim_1_ethnic_origin)) +
+  theme(axis.text.x = element_text(size = 6))
+
+```
+
+```{r missing values}
+#missing values
+homicide %>% 
+  count(year) # 17,815 reported in 2020 US and 17,817 in this data. 14,548 reported 2019 but only 14016 here.
+
+homicide %>% 
+  count(is.na(month_of_offense))
+
+homicide %>% 
+  count(is.na(victim_1_age))
+
+homicide %>% 
+  count(is.na(victim_1_race))
+
+homicide %>% 
+  count(is.na(victim_1_sex))
+
+homicide %>% 
+  count(is.na(victim_1_ethnic_origin))
+```
+
+```{r}
+homicide %>% 
+  count(victim_1_ethnic_origin)
+
+homicide %>% 
+  count(victim_1_sex)
+
+homicide %>% 
+  count(victim_1_race)
+```
+
+```{r}
+
+homicide %>% 
+  count(victim_1_race,victim_1_ethnic_origin)
+
+#can fill in fips #
+homicide %>% 
+ filter(is.na(fips_state_code)) %>% 
+ count(state)
+
+homicide %>% 
+  filter(is.na(state))
+```
+
+
+```{r filling in missing data}
+homicide$victim_1_ethnic_origin <- homicide$victim_1_ethnic_origin %>% 
+  replace_na('unknown')
+#filling in state fip using state name
+homicide <- mutate(homicide,
+                   STATEFIP = ifelse((!is.na(fips_state_code)),(as.numeric(fips_state_code)),
+                              ifelse(state=="georgia",13,
+                              ifelse(state=="alaska",2,
+                              ifelse(state=="indiana",18,
+                              ifelse(state=="iowa",19,
+                              ifelse(state=="kansas",20,
+                              ifelse(state=="kentucky",21,
+                              ifelse(state=="michigan",26,
+                              ifelse(state=="mississippi",28,
+                              ifelse(state=="missouri",29,
+                              ifelse(state=="new jersey",34,
+                              ifelse(state=="oklahoma",40,
+                              ifelse(state=="pennsylvania",42,
+                              ifelse(state=="south dakota",46,
+                              ifelse(state=="texas",48,
+                              ifelse(state=="vermont",50,
+                              ifelse(state=="west virginia",54,
+                              ifelse(state=="wisconsin",55,NA)))))))))))))))))))
+
+
+skim(homicide)
+```
+
+```{r}
+homicide %>% 
+  count(fips_state_code,STATEFIP,state)
+
+homicide %>% 
+  count(STATEFIP,state)
+
+homicide %>% 
+  count(year,STATEFIP,state)
+```
+
+
+```{r age NAs} 
+#inspecting age missingness
+homicide %>% 
+  filter(victim_1_age == "unknown") %>% 
+  count(STATEFIP) %>% 
+  arrange(desc(n)) #Texas and CA most unknown
+homicide %>% 
+  mutate(missing = ifelse(victim_1_age == "unknown","Tru","False")) %>% 
+  ggplot(mapping = aes(STATEFIP)) +
+  geom_freqpoly(mapping = aes(colour = missing), binwidth=1)
+homicide %>% 
+  filter(victim_1_age=="unknown") %>% 
+  ggplot(mapping = aes(STATEFIP)) +
+  geom_freqpoly( binwidth=1)
+```
+
+
+```{r} 
+#inspecting totals by state
+
+
+homicide %>% 
+  group_by(year,state) %>% 
+  summarise(N = n()) %>% 
+  filter(N <25 & year == 2020) %>%   #innacurate Alabama (~471), Florida
+  ggplot(mapping = aes(state,N)) +
+  geom_col() 
+ 
+  
+homicide %>% 
+  group_by(year,state) %>% 
+  summarise(N = n()) %>% 
+  filter(N <25 & year == 2019) %>%   #innacurate Alabama (~471), Florida
+  ggplot(mapping = aes(state,N)) +
+  geom_col() 
+homicide %>% 
+  group_by(year,state) %>% 
+  summarise(N = n()) %>% 
+  filter(N <25 & year == 2019) #innac Alabama (~358), Florida (~1,122)
+
+homicide %>% 
+  group_by(year,state) %>% 
+  summarise(N = n()) %>% 
+  filter(N>800 & N<2500 & year==2020) #major missing ohio (~820), North Carolina (~852) Florida (~1,290), Pennsylvania (~1009), Georgia (~943), New York (~808)
+
+homicide %>% 
+  group_by(year,state) %>% 
+  summarise(N = n()) %>% 
+  filter(N>600 & N<801 & year==2020)
+```
+
+
+```{r coding race variable}
+#coding new race varible
+final_homicide <-mutate(homicide,
+                  race_new = ifelse(victim_1_ethnic_origin == "hispanic",7,
+                  ifelse(victim_1_race == "black" & victim_1_ethnic_origin !="hispanic",2,
+                  ifelse(victim_1_race == "american indian or alaskan native" & victim_1_ethnic_origin
+                         !="hispanic",3,
+                  ifelse(victim_1_race %in% c("asian","native hawaiian or other pacific islander") &
+                           victim_1_ethnic_origin != "hispanic" ,4,
+                  ifelse(victim_1_race == "white" & victim_1_ethnic_origin != "hispanic",1, NA))))),
+                  murder=1
+)
+
+
+
+```
+
+
+```{r}
+skim(final_homicide)
+```
+
+
+```{r checking unknowns & NA}
+final_homicide %>% 
+  count(victim_1_race, victim_1_ethnic_origin, race_new)
+final_homicide %>% 
+  count(is.na(race_new))
+final_homicide %>% 
+  count(is.na(state))
+final_homicide %>% 
+  count(victim_1_sex)
+final_homicide %>% 
+  count(is.na(victim_1_age)) #72 unknown sex
+final_homicide %>% 
+  filter(is.na(state)) #ori appears to correspond to DC for 4 obs. 
+shr_1976_2020 %>% 
+  filter(ori == "VADPP00" | ori=="DCFBIWA")
+final_homicide %>% 
+  filter(victim_1_age=="unknown")
+final_homicide %>% 
+  count(victim_1_age=="unknown")
+final_homicide %>% 
+  count(is.na(victim_1_age))
+```
+
+```{r age/sex drop}
+final_homicide <- filter(final_homicide, victim_1_sex %in% c("female","male")) #keeping only these
+final_homicide %>% 
+  count(victim_1_sex)
+final_homicide <- filter(final_homicide, victim_1_age != "unknown") #droping unknown age
+```
+
+```{r race missing analysis}
+#looking at race
+final_homicide %>% 
+  count(victim_1_race, victim_1_ethnic_origin, race_new) #402=unknown 75 unknown+not hisp
+final_homicide %>% 
+  count(is.na(race_new)) #477 total na
+
+final_homicide %>% 
+  filter(is.na(race_new)) %>% 
+  count(STATEFIP) %>% 
+  arrange(desc(n)) #top: CA, MN, MI, WA, OH
+
+final_homicide %>% 
+  mutate(missing = is.na(race_new)) %>% 
+  ggplot(mapping = aes(STATEFIP)) +
+  geom_histogram(mapping = aes(colour = missing), binwidth=1)
+
+final_homicide %>% 
+  filter(is.na(race_new)) %>% 
+  ggplot(mapping = aes(STATEFIP)) +
+  geom_freqpoly( binwidth=1)
+```
+
+```{r race drop NAs}
+final_homicide <- filter(final_homicide, !is.na(race_new))
+final_homicide %>% 
+  count(is.na(race_new))
+```
+
+```{r race drop obs.}
+final_homicide %>% 
+  count(race_new)
+final_homicide %>% 
+  count(victim_1_race, victim_1_ethnic_origin, race_new)
+final_homicide <- filter(final_homicide, race_new %in% c(1,2,4,7)) #keeping only these race categories. apprx 466 dropped 
+final_homicide %>% 
+  count(victim_1_race, victim_1_ethnic_origin, race_new) #race appears to be coded correctly
+final_homicide %>% 
+  count(race_new) #final race count
+```
+
+```{r age na missing analysis}
+#looking at age
+final_homicide$AGE <- as.numeric(final_homicide$victim_1_age)
+final_homicide %>% 
+  count(is.na(AGE))
+final_homicide %>% 
+  filter(is.na(AGE))
+final_homicide %>% 
+  filter(is.na(AGE)) %>% 
+  count(victim_1_age) #vict variable includes text for <1yr and over 99
+```
+
+```{r age variable cleaning}
+final_homicide$AGE[final_homicide$victim_1_age=="7 days to 364 days" | final_homicide$victim_1_age=="birth to 6 days, including abandoned infant"] <- 0
+final_homicide$AGE[final_homicide$victim_1_age=="99 years or older"] <- 99
+
+```
+
+```{r}
+skim(final_homicide)
+```
+
+```{r}
+final_homicide %>% 
+  filter(is.na(AGE))
+```
+
+
+
+```{r coding sex variable}
+final_homicide <- mutate(final_homicide,
+                        male = ifelse(victim_1_sex=="male",1,0),
+                        YEAR = year
+                       )
+```
+
+```{r state fip NA drop}
+final_homicide %>% 
+  count(is.na(STATEFIP))
+final_homicide %>% 
+  filter(is.na(STATEFIP))
+final_homicide %>% 
+  count(is.na(YEAR))
+final_homicide <- filter(final_homicide, !is.na(STATEFIP)) #dropping missing state fip
+skim(final_homicide)
+```
+
+```{r final yr. count}
+final_homicide %>% 
+  count(YEAR)
+```
+```{r}
+skim(final_homicide)
+```
+
+
+```{r collapsing homicide totals}
+summary_homicide <- summaryBy(murder ~ YEAR +STATEFIP + male + race_new + AGE, FUN=c(sum), data=final_homicide)
+```
+
+```{r}
+skim(summary_homicide)
+```
+
+
+```{r census+homicide merge}
+final <- full_join(summary_final, summary_homicide, by = c("YEAR","STATEFIP", "male","race_new","AGE"))
+skim(final)
+```
+
+```{r}
+final %>% 
+  filter(YEAR==2020) %>% 
+  mutate(missing = is.na(PERWT.sum)) %>% 
+  ggplot(mapping = aes(STATEFIP)) +
+  geom_freqpoly(mapping = aes(colour = missing), binwidth = 3/4)
+```
+
+
+```{r coding final variables}
+
+final$race_new <- factor(final$race_new,
+                     levels = c(1,2,3,4,7),
+                     labels = c("White","Black","American Indian","Asian/PI","Hispanic")
+                           )
+final$male <- factor(final$male,
+                     levels = c(0,1),
+                     labels = c("Female","Male")
+                           )
+
+
+
+final$YEAR <- factor(final$YEAR)
+#replacing missing values for murder sum variable to zero
+final$murder.sum <- replace(final$murder.sum, is.na(final$murder.sum), 0)
+
+#setting weight sum to zero for few observations with ages in the 90s where populatin estimate is missing. Age group collapsed to broader category below
+final$PERWT.sum <- replace(final$PERWT.sum, is.na(final$PERWT.sum), 0)
+
+
+#generate new age groups
+final <- mutate(final,
+                murder =murder.sum,
+                PERWT = PERWT.sum,
+                age_group = ifelse(AGE>=0 & AGE < 6,1,
+                            ifelse(AGE>5 & AGE<11,2,
+                            ifelse(AGE>10 & AGE<16,3,
+                            ifelse(AGE>15 & AGE<21,4,
+                            ifelse(AGE>20 & AGE<26,5,
+                            ifelse(AGE>25 & AGE<31,6,
+                            ifelse(AGE>30 & AGE<36,7,
+                            ifelse(AGE>35 & AGE<41,8,
+                            ifelse(AGE>40 & AGE<46,9,
+                            ifelse(AGE>45 & AGE<51,10,
+                            ifelse(AGE>50 & AGE<56,11,
+                            ifelse(AGE>55 & AGE<61,12,
+                            ifelse(AGE>60 & AGE<66,13,14))))))))))))))
+```
+
+```{r age group collapse}
+final$age_group <- ordered(final$age_group,
+                     levels=c(1,2,3,4,5,6,7,8,9,10,11,12,13,14),
+                     labels=c("0-5","6-10","11-15","16-20","21-25","26-30","31-35","36-40","41-45","46-50","51-55","56-60","61-65","Over 65"))
+
+#collapse by the broader age groupings
+summary_final <- summaryBy(murder + PERWT~ YEAR + STATEFIP + male + race_new + age_group, FUN=c(sum), data=final)
+
+
+
+
+
+```
+
+
+
+```{r}
+skim(summary_final)
+```
+
+
+```{r murder rate calc}
+#create  murder rate
+#summary_final$PERWT.sum[summary_final$PERWT.sum==0] <- 10000
+
+summary_final <- mutate(summary_final,
+                        murder_rate = murder.sum/PERWT.sum*100000)
+summary_final <- summary_final %>% 
+  filter(PERWT.sum != 0)
+
+summary_final <- summary_final %>%  mutate_at(vars(murder_rate), funs(round(.,2)))
+summary_final <- summary_final %>%  
+  mutate_at(vars(murder_rate), funs(format(., digits=2)))
+summary_final$murder_rate <- as.double(summary_final$murder_rate)
+
+```
+
+```{r writing csv}
+write_rds(summary_final, file = "murder_rates.rds")
+```
+
+```{r graphing age counts}
+summary_final %>% 
+  filter(YEAR==2020) %>% 
+  ggplot(aes(x=age_group)) +
+  geom_bar() +facet_wrap(~STATEFIP)
+
+summary_final %>% 
+  filter(YEAR==2019) %>% 
+  ggplot(aes(x=age_group)) +
+  geom_bar() +facet_wrap(~STATEFIP)
+
+ggplot(final_homicide, aes(x=AGE)) +
+  stat_count() + facet_wrap(~state) 
+```
+
+
+
+
+
+
+
+
+
+
+```{r}
+summary_final %>% 
+  filter(YEAR==2020) %>% 
+  ggplot(aes(murder_rate)) + 
+  geom_freqpoly(aes(colour=race_new),binwidth = 0.1) + xlim(.1,50) + facet_wrap(~STATEFIP)
+
+summary_final %>% 
+  filter(YEAR==2020) %>% 
+  ggplot(aes(x=`age_group`, y=murder.sum, label=murder.sum)) + 
+  geom_bar(stat='identity', aes(fill=race_new), position = "dodge")  +
+  xlab("Age Group") +
+  ylab("Change in Murders per 100K, 2019 to 2020") +
+  scale_fill_brewer(palette = "Set1") + 
+  labs(subtitle="By Age Group-Gender-Race", 
+       title= "MI Change in Murders per 100K Residents, 2019 to 2020") + 
+  guides(fill=guide_legend(title = "Race")) +
+  facet_wrap(~ male, ncol = 2) +
+  coord_flip()
+
+summary_final %>% 
+  filter(YEAR==2019) %>% 
+  ggplot(aes(x=`age_group`, y=murder.sum, label=murder.sum)) + 
+  geom_bar(stat='identity', aes(fill=race_new), position = "dodge")  +
+  xlab("Age Group") +
+  ylab("Change in Murders per 100K, 2019 to 2020") +
+  scale_fill_brewer(palette = "Set1") + 
+  labs(subtitle="By Age Group-Gender-Race", 
+       title= "MI Change in Murders per 100K Residents, 2019 to 2020") + 
+  guides(fill=guide_legend(title = "Race")) +
+  facet_wrap(~ male, ncol = 2) +
+  coord_flip()
+
+summary_final %>% 
+  filter(YEAR==2020) %>% 
+  ggplot(aes(x=`age_group`, y=murder.sum, label=murder.sum)) + 
+  geom_bar(stat='identity', aes(fill=race_new), position = "dodge")  +
+  xlab("Age Group") +
+  ylab("Change in Murders per 100K, 2019 to 2020") +
+  scale_fill_brewer(palette = "Set1") + 
+  labs(subtitle="By Age Group-Gender-Race", 
+       title= "MI Change in Murders per 100K Residents, 2019 to 2020") + 
+  guides(fill=guide_legend(title = "Race")) +
+  facet_wrap(~ STATEFIP)
+
+summary_final %>% 
+  filter(YEAR==2019) %>% 
+  ggplot(aes(x=`age_group`, y=murder.sum, label=murder.sum)) + 
+  geom_bar(stat='identity', aes(fill=race_new), position = "dodge")  +
+  xlab("Age Group") +
+  ylab("Change in Murders per 100K, 2019 to 2020") +
+  scale_fill_brewer(palette = "Set1") + 
+  labs(subtitle="By Age Group-Gender-Race", 
+       title= "MI Change in Murders per 100K Residents, 2019 to 2020") + 
+  guides(fill=guide_legend(title = "Race")) +
+  facet_wrap(~ STATEFIP)
+```
+```{r graph race}
+ggplot(summary_final, aes(x=race_new)) +
+  geom_bar(aes(y = (..count..)/sum(..count..))) + facet_wrap(~YEAR) + coord_flip()
+ggplot(final_homicide, aes(x=race_new)) +
+  geom_bar(aes(y = (..count..)/sum(..count..))) + facet_wrap(~YEAR) + coord_flip()
+```
+
+```{r agency count tables}
+library(kableExtra)
+agencies_total <- final_homicide %>%
+  group_by(YEAR,ori,state) %>% 
+  summarise(total = sum(murder)) %>% 
+  arrange(desc(total)) %>% 
+  kable(caption = "Total per Agency")
+ agencies_total
+```
+
+
+```{r total by state}
+select(final_homicide, ori) %>% unique %>% nrow
+
+final_homicide %>% 
+  filter(state =="california" & YEAR==2019) %>% 
+  select(ori) %>% 
+  unique %>% nrow
+
+
+agency_table <- final_homicide %>% 
+  group_by(state,YEAR) %>% 
+  summarise(total = length(unique(ori))) %>% 
+  select(YEAR,state,total) %>% 
+  pivot_wider(
+               names_from = "YEAR",
+               values_from = "total") %>% 
+  kable(caption = "Total Agencies Reporting")
+agency_table
+
+
+murdersum_table <- final_homicide %>% 
+  group_by(state,YEAR) %>% 
+  summarise(total  = sum(murder)) %>% 
+  select(YEAR,state,total) %>% 
+  pivot_wider(
+               names_from = "YEAR",
+               values_from = "total") %>% 
+  kable(caption = "Total homicides Reporting")
+murdersum_table 
+
+
+final_homicide %>% 
+  group_by(state,YEAR) %>% 
+  summarise(total  = sum(murder)) %>% 
+  select(YEAR,state,total) %>% 
+  pivot_wider(
+               names_from = "YEAR",
+               values_from = "total") %>% 
+  kable(caption = "Total homicides Reporting") %>% 
+  kable_styling() %>% 
+  save_kable("state_total.html",self_contained = F)
+webshot::webshot("state_total.html")
+```
+
+
+
+
+
+```{r national # data create}
+homicide_nat <- filter(final, !(STATEFIP == 12 | STATEFIP == 42 | STATEFIP == 1)) #Dropping states that didn't report homicides
+```
+
+
+
+```{r US full analysis}
+homicide_nat <- summaryBy(murder + PERWT~ YEAR + male + race_new + age_group, FUN=c(sum), data=final)
+```
+
+
+```{r national murder rate calc}
+#create  murder rate
+#summary_final$PERWT.sum[summary_final$PERWT.sum==0] <- 10000
+
+homicide_nat <- mutate(homicide_nat,
+                        murder_rate = murder.sum/PERWT.sum*100000)
+
+
+homicide_nat <- homicide_nat %>%  mutate_at(vars(murder_rate), funs(round(.,2)))
+homicide_nat <- homicide_nat %>%  
+  mutate_at(vars(murder_rate), funs(format(., digits=2)))
+homicide_nat$murder_rate <- as.double(homicide_nat$murder_rate)
+
+```
+
+
+```{r writing nat data}
+write_rds(homicide_nat, file = "homicide_nat.rds")
+```
+
+```{r calc # per state}
+hom_state_summ <- summaryBy(murder ~ YEAR + STATEFIP + state, FUN=c(sum), data=final_homicide) 
+
+pop_state_summ <- summaryBy(PERWT~ YEAR + STATEFIP, FUN=c(sum), data=data)
+
+y2020_state <- filter(pop_state_summ, YEAR==2019)
+y2020_state <-mutate(y2020_state,
+               YEAR=YEAR+1)
+state_summ_final <-rbind(pop_state_summ,y2020_state)
+
+hom_state <- full_join(state_summ_final, hom_state_summ, by = c("YEAR","STATEFIP"))
+
+hom_state$PERWT.sum[hom_state$STATEFIP== 12 | hom_state$STATEFIP==42 | hom_state$STATEFIP==1] <- 0
+
+hom_state$murder.sum[hom_state$STATEFIP== 12 | hom_state$STATEFIP==42 | hom_state$STATEFIP==1] <- 0
+
+
+```
+
+```{r}
+write_rds(hom_state, "hom_state.rds")
+```
+

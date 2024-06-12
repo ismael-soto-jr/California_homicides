@@ -1,0 +1,4 @@
+"0","homicide %>% "
+"0","  filter(victim_1_age==""unknown"") %>% "
+"0","  ggplot(mapping = aes(STATEFIP)) +"
+"0","  geom_freqpoly( binwidth=1)"

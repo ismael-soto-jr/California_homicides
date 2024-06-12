@@ -1,0 +1,4 @@
+"0",""
+"0","shr_1976_2020 %>% "
+"0","  filter(year>2018 & homicide_type==""manslaughter by negligence"") %>% "
+"0","  count(homicide_type,offender_1_circumstance) #need to drop negligent homicides"

@@ -1,0 +1,2 @@
+"0","ggplot(summary_final, aes(x=race_new)) +"
+"0","  geom_bar(aes(y = (..count..)/sum(..count..))) + facet_wrap(~YEAR) + coord_flip()"

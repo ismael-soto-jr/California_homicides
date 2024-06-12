@@ -1,0 +1,6 @@
+"0","hom_state <- rename(hom_state, murder.sum = murder_state)
+"
+"2","Error: Can't rename columns that don't exist.
+[31mx[39m Column `murder_state` doesn't exist.
+[90mRun `rlang::last_error()` to see where the error occurred.[39m
+"

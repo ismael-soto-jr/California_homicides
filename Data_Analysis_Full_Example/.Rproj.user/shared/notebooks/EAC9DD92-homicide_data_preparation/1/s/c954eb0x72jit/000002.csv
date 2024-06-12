@@ -1,0 +1,11 @@
+"0","#inspecting totals by state"
+"0",""
+"0",""
+"0","homicide %>% "
+"0","  group_by(year,state) %>% "
+"0","  summarise(N = n()) %>% "
+"0","  filter(N <25 & year == 2020) %>%   #innacurate Alabama (~471), Florida"
+"0","  ggplot(mapping = aes(state,N)) +"
+"0","  geom_col() "
+"1","`summarise()` has grouped output by 'year'. You can override using the `.groups` argument.
+"

@@ -1,0 +1,18 @@
+"0","library(kableExtra)"
+"2","
+Attaching package: ‘kableExtra’
+
+"
+"2","The following object is masked from ‘package:dplyr’:
+
+    group_rows
+
+"
+"0","agencies_total <- final_homicide %>%"
+"0","  group_by(YEAR,ori,state) %>% "
+"0","  summarise(total = sum(murder)) %>% "
+"0","  arrange(desc(total)) %>% "
+"0","  kable(caption = ""Total per Agency"")"
+"1","`summarise()` has grouped output by 'YEAR', 'ori'. You can override using the `.groups` argument.
+"
+"0"," agencies_total"

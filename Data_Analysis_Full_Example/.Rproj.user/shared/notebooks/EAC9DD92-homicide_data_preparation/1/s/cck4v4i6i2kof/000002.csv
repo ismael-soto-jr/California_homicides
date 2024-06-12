@@ -1,0 +1,3 @@
+"0","ggplot(data=homicide) +"
+"0","  geom_bar(mapping = aes(x=victim_1_race)) +"
+"0","  theme(axis.text.x = element_text(size = 6))"

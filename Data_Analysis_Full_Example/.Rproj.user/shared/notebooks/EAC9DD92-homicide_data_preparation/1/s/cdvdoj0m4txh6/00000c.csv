@@ -1,0 +1,10 @@
+"0","summary_final %>% "
+"0","  filter(YEAR==2020) %>% "
+"0","  ggplot(aes(murder_rate)) + "
+"0","  geom_freqpoly(aes(colour=race_new),binwidth = 0.1) + xlim(.1,50) + facet_wrap(~STATEFIP)"
+"2","Warning:"
+"2"," Removed 3512 rows containing non-finite values (stat_bin).
+"
+"2","Warning:"
+"2"," Removed 8 row(s) containing missing values (geom_path).
+"

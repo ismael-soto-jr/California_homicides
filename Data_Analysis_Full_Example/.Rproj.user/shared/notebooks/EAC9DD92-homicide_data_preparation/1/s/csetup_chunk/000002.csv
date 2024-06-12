@@ -1,0 +1,125 @@
+"0","knitr::opts_chunk$set(echo = TRUE)"
+"0","library(haven)"
+"0","library(readr)"
+"0","library(tidyverse)"
+"2","Registered S3 methods overwritten by 'dbplyr':
+  method         from
+  print.tbl_lazy     
+  print.tbl_sql      
+"
+"2","[30m── [1mAttaching packages[22m ─────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse 1.3.1 ──[39m
+"
+"2","[30m[32m✓[30m [34mggplot2[30m 3.3.5     [32m✓[30m [34mdplyr  [30m 1.0.7
+[32m✓[30m [34mtibble [30m 3.1.6     [32m✓[30m [34mstringr[30m 1.4.0
+[32m✓[30m [34mtidyr  [30m 1.1.4     [32m✓[30m [34mforcats[30m 0.5.1
+[32m✓[30m [34mpurrr  [30m 0.3.4     [39m
+"
+"2","[30m── [1mConflicts[22m ────────────────────────────────────────────────────────────────────────────────────────────────────────── tidyverse_conflicts() ──
+[31mx[30m [34mdplyr[30m::[32mfilter()[30m masks [34mstats[30m::filter()
+[31mx[30m [34mdplyr[30m::[32mlag()[30m    masks [34mstats[30m::lag()[39m
+"
+"0","library(dplyr)"
+"0","library(here)"
+"2","here() starts at /Users/ismaelsoto/Desktop/R/Work 2021
+"
+"0","library(table1)"
+"2","
+Attaching package: ‘table1’
+
+"
+"2","The following objects are masked from ‘package:base’:
+
+    units, units<-
+
+"
+"0","library(pastecs)"
+"2","
+Attaching package: ‘pastecs’
+
+"
+"2","The following objects are masked from ‘package:dplyr’:
+
+    first, last
+
+"
+"2","The following object is masked from ‘package:tidyr’:
+
+    extract
+
+"
+"0","library(furniture)"
+"2","Registered S3 methods overwritten by 'furniture':
+  method               from  
+  as.data.frame.table1 table1
+  print.table1         table1
+"
+"2","
+Attaching package: ‘furniture’
+
+"
+"2","The following object is masked from ‘package:table1’:
+
+    table1
+
+"
+"0","library(gridExtra)"
+"2","
+Attaching package: ‘gridExtra’
+
+"
+"2","The following object is masked from ‘package:dplyr’:
+
+    combine
+
+"
+"0","library(tidycensus)"
+"0","library(purrr)"
+"0","library(ipumsr)"
+"0","library(doBy)"
+"2","
+Attaching package: ‘doBy’
+
+"
+"2","The following object is masked from ‘package:dplyr’:
+
+    order_by
+
+"
+"0","library(skimr)"
+"2","Registered S3 methods overwritten by 'htmltools':
+  method               from         
+  print.html           tools:rstudio
+  print.shiny.tag      tools:rstudio
+  print.shiny.tag.list tools:rstudio
+"
+"0","library(stringr)"
+"0","library(modelr)"
+"0","library(ggrepel)"
+"0","library(plotly)"
+"2","Registered S3 method overwritten by 'data.table':
+  method           from
+  print.data.table     
+"
+"2","Registered S3 method overwritten by 'htmlwidgets':
+  method           from         
+  print.htmlwidget tools:rstudio
+"
+"2","
+Attaching package: ‘plotly’
+
+"
+"2","The following object is masked from ‘package:ggplot2’:
+
+    last_plot
+
+"
+"2","The following object is masked from ‘package:stats’:
+
+    filter
+
+"
+"2","The following object is masked from ‘package:graphics’:
+
+    layout
+
+"

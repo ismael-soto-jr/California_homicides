@@ -1,0 +1,2 @@
+"0","final_homicide %>% "
+"0","  count(is.na(victim_1_age)) #72 unknown sex"

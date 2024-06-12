@@ -1,0 +1,5 @@
+"0","#inspecting age missingness"
+"0","homicide %>% "
+"0","  filter(victim_1_age == ""unknown"") %>% "
+"0","  count(STATEFIP) %>% "
+"0","  arrange(desc(n)) #Texas and CA most unknown"

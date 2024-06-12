@@ -1,0 +1,25 @@
+"0",""
+"0",""
+"0",""
+"0","comparison <- comparison %>% "
+"0","  mutate_at(vars(murder_rate_2019,murder_rate_2020), funs(round(.,2))) %>% "
+"0","  mutate(change = murder_rate_2020 - murder_rate_2019,"
+"0","         total = murder.sum_2019 + murder.sum_2020)"
+"2","Warning:"
+"2"," `funs()` was deprecated in dplyr 0.8.0.
+Please use a list of either functions or lambdas: 
+
+  # Simple named list: 
+  list(mean = mean, median = median)
+
+  # Auto named with `tibble::lst()`: 
+  tibble::lst(mean, median)
+
+  # Using lambdas
+  list(~ mean(., trim = .2), ~ median(., na.rm = TRUE))
+[90mThis warning is displayed once every 8 hours.[39m
+[90mCall `lifecycle::last_lifecycle_warnings()` to see where this warning was generated.[39m
+"
+"0"," "
+"0","#comparison$""2019"" <- as.numeric(comparison$""2019"")"
+"0","#comparison$""2020"" <- as.numeric(comparison$""2020"")"

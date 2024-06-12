@@ -1,0 +1,8 @@
+"0",""
+"0","table <- homicide %>%"
+"0","  filter(homicide_type==""manslaughter by negligence"" | offender_1_circumstance== ""felon killed by police"" | offender_1_circumstance==""felon killed by private citizen"") %>% "
+"0","  group_by(state, year) %>%"
+"0","  count(homicide_type,offender_1_circumstance) %>% "
+"0","  kable(caption = ""Total Justifiable & negligent per year/state/type/circumstance"")"
+"0",""
+"0","table"

@@ -1,0 +1,3 @@
+"0","final_homicide <- filter(final_homicide, victim_1_sex %in% c(""female"",""male"")) #keeping only these"
+"0","final_homicide %>% "
+"0","  count(victim_1_sex)"

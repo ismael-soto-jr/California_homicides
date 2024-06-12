@@ -1,0 +1,7 @@
+"0","all_dc <- filter(summary_final, YEAR %in% c(2019,2020) & STATEFIP == 11) %>% "
+"0","  ggplot(., mapping =aes(x=reorder(age_group, desc(age_group)), y=murder_rate)) + "
+"0","    geom_line() +geom_point(aes(color=YEAR), alpha=.8) +facet_wrap(~race_new + male, ncol =2) +coord_flip() +"
+"0","    labs(x = ""Age Group"", y = ""Murders per 100,000"")"
+"0",""
+"0",""
+"0","ggsave(file = ""all_dc.png"", all_dc, height = 8, width=6.5)"

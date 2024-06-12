@@ -1,0 +1,6 @@
+"0","#need to drop these ~3243"
+"0","t4 <- shr_1976_2020 %>% "
+"0","  filter(year>2018 & (homicide_type==""manslaughter by negligence"" | offender_1_circumstance== ""felon killed by police"" | offender_1_circumstance==""felon killed by private citizen""))"
+"0",""
+"0","t4 %>% "
+"0","  filter(offender_1_circumstance== ""felon killed by police"" | offender_1_circumstance==""	felon killed by private citizen"")"

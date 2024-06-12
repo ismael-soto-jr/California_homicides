@@ -1,0 +1,13 @@
+"0","final_homicide %>% 
+  group_by(state,YEAR) %>% 
+  summarise(total  = sum(murder)) %>% 
+  select(YEAR,state,total) %>% 
+  pivot_wider(
+               names_from = ""YEAR"",
+               values_from = ""total"") %>% 
+  kable(caption = ""Total homicides Reporting"") %>% 
+  kable_styling() %>% 
+  save_kable(""state_total.html"",self_contained = F)
+"
+"1","`summarise()` has grouped output by 'state'. You can override using the `.groups` argument.
+"

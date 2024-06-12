@@ -1,0 +1,7 @@
+"0","homicide %>% "
+"0","  mutate(missing = ifelse(victim_1_age == ""unknown"",""Tru"",""False"")) %>% "
+"0","  ggplot(mapping = aes(STATEFIP)) +"
+"0","  geom_freqpoly(mapping = aes(colour = missing), binwidth=1)"
+"2","Warning:"
+"2"," Removed 4 rows containing non-finite values (stat_bin).
+"

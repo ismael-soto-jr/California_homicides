@@ -1,0 +1,104 @@
+---
+title: "CA_homicide"
+author: "Ismael"
+date: "7/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(tidyr)
+library(stringr)
+library(readr)
+library(dplyr)
+library(skimr)
+library(scales)
+library(wesanderson)
+library(hrbrthemes)
+library(knitr)
+library(kableExtra)
+library(magick)
+library(formattable)
+```
+
+
+
+```{r}
+ 
+homicide <- read.csv("Homicide _Actuals_1987-2020.csv")
+homicide <-filter(homicide, Year.of.Incident>2014 )
+
+#fixing the age variable
+homicide$AGE <- replace(homicide$Age,homicide$Age =="00"|homicide$Age=="0",NA)
+homicide$AGE <- replace(homicide$AGE,homicide$AGE =="NB"|homicide$AGE=="BB",0)
+homicide$AGE <-as.numeric(homicide$AGE) 
+
+
+#coding new race varible
+homicide <-mutate(homicide,
+                  race_new = ifelse(Race.Ethnicity == "W",1,
+                  ifelse(Race.Ethnicity == "B",2,
+                  ifelse(Race.Ethnicity == "I",3,
+                  ifelse(Race.Ethnicity %in% c("C","J","F","D","P","A","D","G","K","L","S","U","V","Z"),4,
+                  ifelse(Race.Ethnicity =="O",5,
+                  ifelse(Race.Ethnicity == "H",7, NA)))))),
+                  male = ifelse(Gender==1,1,
+                         ifelse(Gender==2,0,NA)),
+                  YEAR = Year.of.Incident,
+                  murder=1
+)
+
+
+homicide <- filter(homicide, !is.na(YEAR) & !is.na(AGE) & !is.na(race_new) & !is.na(male))
+homicide <- filter(homicide, race_new %in% c(1,2,4,7))
+
+#replacing missing values for murder sum variable to zero
+#final$murder.sum <- replace(final$murder.sum, is.na(final$murder.sum), 0)
+
+#generate new age groups
+homicide <- mutate(homicide,
+            
+                age_group = ifelse(AGE>-1 & AGE < 6,1,
+                            ifelse(AGE>5 & AGE<11,2,
+                            ifelse(AGE>10 & AGE<16,3,
+                            ifelse(AGE>15 & AGE<21,4,
+                            ifelse(AGE>20 & AGE<26,5,
+                            ifelse(AGE>25 & AGE<31,6,
+                            ifelse(AGE>30 & AGE<36,7,
+                            ifelse(AGE>35 & AGE<41,8,
+                            ifelse(AGE>40 & AGE<46,9,
+                            ifelse(AGE>45 & AGE<51,10,
+                            ifelse(AGE>50 & AGE<56,11,
+                            ifelse(AGE>55 & AGE<61,12,
+                            ifelse(AGE>60 & AGE<66,13,14))))))))))))))
+
+homicide$age_group <- ordered(homicide$age_group,
+                     levels=c(1,2,3,4,5,6,7,8,9,10,11,12,13,14),
+                     labels=c("0-5","6-10","11-15","16-20","21-25","26-30","31-35","36-40","41-45","46-50","51-55","56-60","61-65","Over 65"))
+
+#variable to indicate if involved gun
+homicide <- homicide %>% 
+  add_column(Gun = 0)
+
+homicide$Gun <- replace(homicide$Gun,homicide$Means.of.death > 0 & homicide$Means.of.death < 6,1)
+
+
+
+```
+
+```{r}
+skim(homicide)
+```
+
+
+```{r}
+#variable to indicate if involved gun
+homicide$Date <- as.Date(with(homicide, paste(Year.of.Incident, Month.of.Incident, Day.of.month.of.Incident, sep="-")), "%Y-%m-%d")
+```
+
+
+
+
+

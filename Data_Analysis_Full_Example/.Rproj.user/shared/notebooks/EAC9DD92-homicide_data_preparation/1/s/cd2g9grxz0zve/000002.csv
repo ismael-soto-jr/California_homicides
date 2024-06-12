@@ -1,0 +1,4 @@
+"0","final_homicide <- mutate(final_homicide,"
+"0","                        male = ifelse(victim_1_sex==""male"",1,0),"
+"0","                        YEAR = year"
+"0","                       )"

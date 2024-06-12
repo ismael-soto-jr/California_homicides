@@ -1,0 +1,7 @@
+"0","hom_state_final <- full_join(summary_final, hom_state, by = c(""YEAR"",""STATEFIP""))
+"
+"2","Error: Can't join on `x$YEAR` x `y$YEAR` because of incompatible types.
+[34mℹ[39m `x$YEAR` is of type <factor<f5d27>>>.
+[34mℹ[39m `y$YEAR` is of type <double>>.
+[90mRun `rlang::last_error()` to see where the error occurred.[39m
+"

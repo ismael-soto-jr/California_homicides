@@ -1,0 +1,5 @@
+"0","final %>% "
+"0","  filter(YEAR==2020) %>% "
+"0","  mutate(missing = is.na(PERWT.sum)) %>% "
+"0","  ggplot(mapping = aes(STATEFIP)) +"
+"0","  geom_freqpoly(mapping = aes(colour = missing), binwidth = 3/4)"

@@ -1,0 +1,6 @@
+"0","homicide %>% "
+"0","  group_by(year,state) %>% "
+"0","  summarise(N = n()) %>% "
+"0","  filter(N>600 & N<801 & year==2020)"
+"1","`summarise()` has grouped output by 'year'. You can override using the `.groups` argument.
+"

@@ -1,0 +1,8 @@
+"0",""
+"0","final_homicide %>% "
+"0","  mutate(missing = is.na(race_new)) %>% "
+"0","  ggplot(mapping = aes(STATEFIP)) +"
+"0","  geom_histogram(mapping = aes(colour = missing), binwidth=1)"
+"2","Warning:"
+"2"," Removed 4 rows containing non-finite values (stat_bin).
+"

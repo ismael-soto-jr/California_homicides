@@ -1,0 +1,2 @@
+"0","homicide %>% "
+"0","  count(fips_state_code,STATEFIP,state)"

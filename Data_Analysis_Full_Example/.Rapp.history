@@ -1,0 +1,2 @@
+load("/Users/ismaelsoto/Documents/TRANSFER FILES/R/Work 2021/murder_rates.rds")
+load("/Users/ismaelsoto/Documents/TRANSFER FILES/R/Work 2021/murder_rates2.rds")

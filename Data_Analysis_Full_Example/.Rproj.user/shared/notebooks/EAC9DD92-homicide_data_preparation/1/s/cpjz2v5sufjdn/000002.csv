@@ -1,0 +1,1 @@
+"0","summary_homicide <- summaryBy(murder ~ YEAR +STATEFIP + male + race_new + AGE, FUN=c(sum), data=final_homicide)"

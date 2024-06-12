@@ -1,0 +1,612 @@
+---
+title: "homicide_week_analysis"
+author: "Ismael"
+date: "7/20/2021"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(here)
+library(haven)
+library(table1)
+library(pastecs)
+library(furniture)
+library(dplyr)
+library(gridExtra)
+library(tidycensus)
+library(purrr)
+library(ipumsr)
+library(doBy)
+library(lubridate)
+library(skimr)
+library(socviz)
+
+
+freq <- function(x) {
+  frequency <- table(x, useNA = "ifany")
+  proportion <- round(prop.table(table(x, useNA = "ifany"),),3)
+  cbind(frequency, proportion)
+}
+
+freq_sort <- function(x) {
+  frequency <- table(x, useNA = "ifany")
+  proportion <- round(prop.table(table(x, useNA = "ifany"),),3)
+  out <- cbind(frequency, proportion)
+  out[order(out[,1],decreasing=TRUE),]
+}
+
+freq2 = function(x,y){
+  table(x,y, useNA = "ifany")
+}
+
+freq2_col <-function(x,y){
+  prop.table(table(x,y,useNA = "ifany"),2)
+}
+
+freq2_row <-function(x,y){
+  prop.table(table(x,y,useNA = "ifany"),1)
+}
+
+
+
+```
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r createsummary}
+
+ddi <- read_ipums_ddi("usa_00042.xml")
+data <- read_ipums_micro(ddi)
+
+data <- mutate(data,
+               hispanic=ifelse(HISPAN>0,1,0),
+               race_new = ifelse(RACE==1 & hispanic==0,1,
+                          ifelse(RACE==2 & hispanic==0,2,
+                          ifelse(RACE==3 & hispanic==0,3,
+                          ifelse(RACE==4 & hispanic==0,4,
+                          ifelse(RACE==5 & hispanic==0,4,
+                          ifelse(RACE==6 & hispanic==0,4,
+                          ifelse(RACE==7 & hispanic==0,5,
+                          ifelse(RACE==8 & hispanic==0,6,
+                          ifelse(RACE==9 & hispanic==0,6,
+                          ifelse(hispanic==1,7,8)))))))))),
+               male = ifelse(SEX==1,1,0)
+               )
+ 
+summary <- summaryBy(PERWT ~ YEAR + male + race_new + AGE, FUN=c(sum,mean,length), data=data)
+#check that weights sum to California population in each year
+summary2 <- summaryBy(PERWT.sum ~ YEAR, FUN=c(sum), data=summary)
+
+
+#create a year 2020  using 2019 populatin estimates (Temporary until IPUMS 2020 released)
+y2020 <- filter(summary, YEAR==2019)
+y2020 <-mutate(y2020,
+               YEAR=YEAR+1)
+summary_final <-rbind(summary,y2020)
+summary_final <-filter(summary_final, race_new %in% c(1,2,4,7))
+```
+ 
+```{r}
+ 
+homicide <- read.csv("~/Dropbox/California Homicide Project/homicide data/Homicide _Actuals_1987-2020.csv")
+homicide <-filter(homicide, Year.of.Incident>2014 )
+
+#fixing the age variable
+homicide$AGE <- replace(homicide$Age,homicide$Age =="00"|homicide$Age=="0",NA)
+homicide$AGE <- replace(homicide$AGE,homicide$AGE =="NB"|homicide$AGE=="BB",0)
+homicide$AGE <-as.numeric(homicide$AGE) 
+
+
+#coding new race varible
+homicide <-mutate(homicide,
+                  race_new = ifelse(Race.Ethnicity == "W",1,
+                  ifelse(Race.Ethnicity == "B",2,
+                  ifelse(Race.Ethnicity == "I",3,
+                  ifelse(Race.Ethnicity %in% c("C","J","F","D","P","A","D","G","K","L","S","U","V","Z"),4,
+                  ifelse(Race.Ethnicity =="O",5,
+                  ifelse(Race.Ethnicity == "H",7, NA)))))),
+                  male = ifelse(Gender==1,1,
+                         ifelse(Gender==2,0,NA)),
+                  YEAR = Year.of.Incident,
+                  murder=1
+)
+
+
+homicide <- filter(homicide, !is.na(YEAR) & !is.na(AGE) & !is.na(race_new) & !is.na(male))
+homicide <- filter(homicide, race_new %in% c(1,2,4,7))
+summary_homicide <- summaryBy(murder ~ YEAR + male + race_new + AGE, FUN=c(sum), data=homicide)
+
+
+#merging the population estimates and murder totals and filling in zeros
+
+final <- full_join(summary_final, summary_homicide, by = c("YEAR","male","race_new","AGE"))
+
+
+final$race_new <- factor(final$race_new,
+                     levels = c(1,2,3,4,7),
+                     labels = c("White","Black","American Indian","Asian/PI","Hispanic")
+                           )
+final$male <- factor(final$male,
+                     levels = c(0,1),
+                     labels = c("Female","Male")
+                           )
+
+
+
+#final$YEAR <- factor(final$YEAR)
+#replacing missing values for murder sum variable to zero
+final$murder.sum <- replace(final$murder.sum, is.na(final$murder.sum), 0)
+
+#setting weight sum to zero for few observations with ages in the 90s where populatin estimate is missing. Age group collapsed to broader category below
+final$PERWT.sum <- replace(final$PERWT.sum, is.na(final$PERWT.sum), 0)
+
+
+
+#generate new age groups
+final <- mutate(final,
+                murder =murder.sum,
+                PERWT = PERWT.sum,
+                age_group = ifelse(AGE>-1 & AGE < 6,1,
+                            ifelse(AGE>5 & AGE<11,2,
+                            ifelse(AGE>10 & AGE<16,3,
+                            ifelse(AGE>15 & AGE<21,4,
+                            ifelse(AGE>20 & AGE<26,5,
+                            ifelse(AGE>25 & AGE<31,6,
+                            ifelse(AGE>30 & AGE<36,7,
+                            ifelse(AGE>35 & AGE<41,8,
+                            ifelse(AGE>40 & AGE<46,9,
+                            ifelse(AGE>45 & AGE<51,10,
+                            ifelse(AGE>50 & AGE<56,11,
+                            ifelse(AGE>55 & AGE<61,12,
+                            ifelse(AGE>60 & AGE<66,13,14))))))))))))))
+
+final$age_group <- ordered(final$age_group,
+                     levels=c(1,2,3,4,5,6,7,8,9,10,11,12,13,14),
+                     labels=c("0-5","6-10","11-15","16-20","21-25","26-30","31-35","36-40","41-45","46-50","51-55","56-60","61-65","Over 65"))
+```
+
+```{r}
+#collapse by the broader age groupings
+summary_final <- summaryBy(murder + PERWT~ YEAR, FUN=c(sum), data=final)
+
+
+#create  murder rate
+summary_final <- mutate(summary_final,
+                        murder_rate = murder.sum/PERWT.sum*100000)
+
+
+summary_final
+
+``` 
+
+
+
+```{r}
+yr_rate <- ggplot(data=summary_final, mapping = aes(x=YEAR, y=murder_rate)) +
+  geom_line() +
+  #scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_y_continuous(limits = c(3.0, 6.0), labels = scales::number_format(accuracy = .01))
+ 
+  
+yr_rate
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+##Beginning Weekly murder rate analyisis (2015-2020)
+
+
+
+
+```{r}
+summary <- summaryBy(PERWT ~ YEAR + male + race_new + AGE, FUN=c(sum,mean,length), data=data)
+#check that weights sum to California population in each year
+summary2 <- summaryBy(PERWT.sum ~ YEAR, FUN=c(sum), data=summary)
+
+
+#create a year 2020  using 2019 populatin estimates (Temporary until IPUMS 2020 released)
+y2020 <- filter(summary, YEAR==2019)
+y2020 <-mutate(y2020,
+               YEAR=YEAR+1)
+summary_final_week <-rbind(summary,y2020)
+summary_final_week <-filter(summary_final_week, race_new %in% c(1,2,4,7))
+```
+ 
+```{r}
+ 
+homicide <- read.csv("~/Dropbox/California Homicide Project/homicide data/Homicide _Actuals_1987-2020.csv")
+homicide <-filter(homicide, Year.of.Incident>2014 )
+```
+
+```{r}
+#fixing the age variable
+homicide$AGE <- replace(homicide$Age,homicide$Age =="00"|homicide$Age=="0",NA)
+homicide$AGE <- replace(homicide$AGE,homicide$AGE =="NB"|homicide$AGE=="BB",0)
+homicide$AGE <-as.numeric(homicide$AGE) 
+
+
+#coding new race varible
+homicide <-mutate(homicide,
+                  race_new = ifelse(Race.Ethnicity == "W",1,
+                  ifelse(Race.Ethnicity == "B",2,
+                  ifelse(Race.Ethnicity == "I",3,
+                  ifelse(Race.Ethnicity %in% c("C","J","F","D","P","A","D","G","K","L","S","U","V","Z"),4,
+                  ifelse(Race.Ethnicity =="O",5,
+                  ifelse(Race.Ethnicity == "H",7, NA)))))),
+                  male = ifelse(Gender==1,1,
+                         ifelse(Gender==2,0,NA)),
+                  YEAR = Year.of.Incident,
+                  murder=1
+)
+
+
+#variable to indicate if gun involved
+homicide <- mutate(homicide,
+                   gun = ifelse(Means.of.death > 0 & Means.of.death < 6,1,0))
+
+
+
+
+#homicide <- homicide %>% 
+  #add_column(Gun = 0)
+
+#homicide$Gun <- replace(homicide$Gun,homicide$Means.of.death > 0 & homicide$Means.of.death < 6,1)
+
+
+#adding full date variable
+homicide$Date <- as.Date(with(homicide, paste(Year.of.Incident, Month.of.Incident, Day.of.month.of.Incident, sep="-")), "%Y-%m-%d")
+
+
+
+#adding week # variable
+
+homicide <- mutate(homicide, 
+                   week = week(Date))
+
+              
+
+
+
+#coding new precipitating event variable
+homicide <-mutate(homicide,
+                  
+                  event_new = ifelse(Precipitating.Event > 1 & Precipitating.Event < 27,1,
+                  ifelse(Precipitating.Event %in% c(42,43,44,45),2,
+                  ifelse(Precipitating.Event %in% c(46,47,63),3,
+                  ifelse(Precipitating.Event %in% c(61,62),4,
+                  ifelse(Precipitating.Event %in% c(32,40,41,48,49,60,70),5,
+                  ifelse(Precipitating.Event == 99,6, NA)))))))
+
+homicide$event_new <- factor(homicide$event_new,
+                     levels=c(1,2,3,4,5,6),
+                     labels=c("felony murder","arguments","execution/gang killings/drive by","domestic violence/child abuse","other","unknown"))
+```
+
+
+```{r}
+skim(homicide)
+```
+
+
+
+```{r}
+
+homicide <- filter(homicide, !is.na(YEAR) & !is.na(AGE) & !is.na(race_new) & !is.na(male))
+homicide <- filter(homicide, race_new %in% c(1,2,4,7))
+summary_homicide <- summaryBy(murder ~ YEAR + male + race_new + AGE + week, FUN=c(sum), data=homicide)
+```
+
+
+```{r}
+skim(summary_homicide)
+```
+
+
+```{r}
+#merging the population estimates and murder totals and filling in zeros
+
+final <- full_join(summary_final_week, summary_homicide, by = c("YEAR","male","race_new","AGE"))
+
+
+final$race_new <- factor(final$race_new,
+                     levels = c(1,2,3,4,7),
+                     labels = c("White","Black","American Indian","Asian/PI","Hispanic")
+                           )
+final$male <- factor(final$male,
+                     levels = c(0,1),
+                     labels = c("Female","Male")
+                           )
+```
+
+```{r}
+#generate new age groups
+final <- filter(final, !is.na(week))
+```
+
+```{r}
+final$YEAR <- factor(final$YEAR)
+final$week <- factor(final$week)
+#replacing missing values for murder sum variable to zero
+final$murder.sum <- replace(final$murder.sum, is.na(final$murder.sum), 0)
+
+#setting weight sum to zero for few observations with ages in the 90s where populatin estimate is missing. Age group collapsed to broader category below
+final$PERWT.sum <- replace(final$PERWT.sum, is.na(final$PERWT.sum), 0)
+
+
+```
+
+
+
+
+```{r}
+skim(final)
+```
+
+
+```{r}
+
+#collapse by week/year groupings
+summary_final <- summaryBy(murder.sum + PERWT.sum~ YEAR + week, FUN=c(sum), data=final)
+```
+
+```{r}
+skim(summary_final)
+```
+
+
+```{r}
+
+#create  murder rate
+summary_final <- mutate(summary_final,
+                        murder_rate = murder.sum.sum/PERWT.sum.sum*100000)
+```
+
+```{r}
+skim(summary_final)
+```
+
+
+```{r}
+yr_week <- ggplot(data=summary_final, mapping = aes(x=week, y=murder_rate)) +
+  geom_line(aes(group = YEAR)) +
+  geom_point() +
+  theme_minimal() +
+  facet_wrap(~YEAR, ncol=6)
+  #scale_x_date(date_labels = "%W")+
+  #scale_y_continuous()+
+  
+  
+yr_week
+```
+
+```{r}
+library(scales)
+summary_final %>% 
+  ggplot(aes(x = week, y = murder_rate)) +
+  geom_line(aes(group=YEAR, color=YEAR)) +
+  geom_point(aes(color=YEAR)) +
+  facet_wrap(~YEAR, nrow = 2) +
+  #scale_x_continuous(labels = scales::number_format(accuracy = 1)) +
+  scale_y_continuous()
+```
+
+
+
+
+
+
+
+
+```{r}
+library(fastDummies)
+summary_final_dummy <- fastDummies::dummy_cols(summary_final, select_columns = "week")
+```
+
+
+```{r}
+skim(summary_final_dummy)
+```
+
+
+
+```{r}
+summary_final_dummy <- dplyr::select(summary_final_dummy, -c("murder.sum.sum","PERWT.sum.sum"))
+```
+
+
+```{r}
+skim(summary_final_dummy)
+```
+
+
+
+```{r}
+model <- lm(murder_rate~. -YEAR -week, data = summary_final_dummy)
+```
+
+
+```{r}
+summary(model)
+```
+
+
+```{r}
+library(broom)
+out_conf <- tidy(model, conf.int = TRUE)
+out_conf <- out_conf %>% round_df()
+out_conf <- filter(out_conf, !is.na(estimate))
+```
+
+
+```{r}
+conf_plot <- ggplot(out_conf, mapping = aes(x = term,
+                                            y= estimate, ymin=conf.low, ymax=conf.high)) +
+  geom_pointrange() + coord_flip()
+
+conf_plot
+```
+
+
+
+
+```{r}
+res <- resid(model)
+```
+
+
+```{r}
+skim(res)
+```
+
+
+
+```{r}
+plot(fitted(model), res)
+abline(0,0)
+```
+
+
+```{r}
+layout(matrix(c(1,2,3,4),2,2))
+plot(model)
+```
+
+
+```{r}
+summary_final$num_week <- as.numeric(summary_final$week)
+```
+
+
+
+```{r}
+p <- ggplot(summary_final, aes(num_week,murder_rate)) +
+  geom_point(aes(color = YEAR)) +
+  geom_smooth(method="lm") +
+  scale_y_continuous() +
+  scale_x_continuous(breaks = c(1,28,52))
+
+p
+```
+
+
+
+```{r}
+box_plt <- ggplot(summary_final, aes(week,murder_rate)) +
+  geom_boxplot() +
+  scale_x_discrete(breaks = c(1,5,28,52))+
+  scale_y_continuous()
+
+box_plt
+```
+
+
+
+
+```{r}
+library(hrbrthemes)
+yr_week <- ggplot(data=summary_final, mapping = aes(x=num_week, y=murder_rate)) +
+  geom_line(aes(group = YEAR, color = YEAR), size=.2) +
+  geom_point(aes(color = YEAR), size= .5) +
+  theme_minimal() +
+  facet_wrap(~YEAR, ncol = 6) +
+  scale_x_continuous(breaks = c(1,28,52))+
+  scale_y_continuous() +
+  theme_minimal()
+  
+  
+yr_week
+```
+
+
+
+```{r}
+
+out_aug <- augment(model, data = summary_final_dummy)
+head(out_aug) 
+```
+
+
+```{r}
+library(modelr)
+library(ggrepel)
+options(na.action = na.warn)
+residual_plot <- ggplot(data=out_aug, aes(x=.fitted, y= .resid)) +
+  geom_ref_line(h=0) +
+  geom_point(aes(color=YEAR)) +
+  geom_text_repel(data= subset(out_aug, .resid>.5),
+                  mapping = aes(label=week)
+                  
+  )
+  
+
+residual_plot
+```
+
+
+```{r}
+actual_fitted <- ggplot(data=out_aug, aes(x=.fitted, y= murder_rate)) +
+  geom_point(aes(color=murder_rate))+
+  scale_color_gradient(low = "light blue", high = "dark blue")+
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x="predicted",y="actual")
+  
+
+actual_fitted
+```
+
+
+
+
+
+```{r}
+library(ggfortify)
+autoplot(model)
+```
+
+```{r}
+wk_28 <- filter(out_aug, week == 28)
+wk_28 <- select(wk_28, YEAR, week, murder_rate, .fitted, .resid, .hat,.sigma,.cooksd,.std.resid)
+```
+
+
+
+
+```{r}
+wk_28_plot <- ggplot(data=wk_28, aes(x=murder_rate, y= .resid)) +
+  geom_ref_line(h=0) +
+  geom_point(aes(color=YEAR)) +
+  scale_x_continuous(labels = scales::number_format(accuracy = .09)) +
+  scale_y_continuous(labels = scales::number_format(accuracy = .09))+
+  geom_text_repel(data= subset(wk_28, .resid>.15 | .resid < -.15),
+                  mapping = aes(label=YEAR) 
+                  
+  )
+  
+
+wk_28_plot
+```
+```
+
+

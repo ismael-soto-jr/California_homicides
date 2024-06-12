@@ -1,0 +1,7 @@
+"0","#looking at age"
+"0","final_homicide$AGE <- as.numeric(final_homicide$victim_1_age)"
+"2","Warning:"
+"2"," NAs introduced by coercion
+"
+"0","final_homicide %>% "
+"0","  count(is.na(AGE))"
